@@ -6,7 +6,6 @@ from inspect import getfile
 import os
 import torch
 import tools
-import numba
 from scipy.spatial.distance import cdist
 import ot
 import matplotlib.pyplot as plt
