@@ -219,10 +219,11 @@ class Gaussian2(torch.jit.ScriptModule):
         self.Mu = torch.nn.Linear(h, o)
         self.LogStd = torch.nn.Linear(h, o)
         self.tanh = torch.nn.Tanh()
+        self.relu = torch.nn.ReLU()
     @torch.jit.script_method
     def forward(self, x):
         x = self.E(x)
-        return self.tanh(self.Mu(x)), torch.clamp(self.LogStd(x), -20, 0.5).exp()
+        return self.tanh(self.Mu(x)), self.relu(torch.clamp(self.LogStd(x), -20, 0.5).exp())
 
 class FlowMaskedLinear(torch.jit.ScriptModule):
     """

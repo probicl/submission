@@ -34,8 +34,11 @@ pip install pynvml
 
 Comment/uncomment code before running
 ```
-./experiments.sh
-python3 -B plot.py
+ENV="gridworld" # one of ['gridworld', 'cartpole', 'mujoco_ant', 'mujoco_hc', 'highd']
+SEED=0
+BETA=0.99
+DELTA=0.9
+OUTPUT_DIR=output
+python3 -B icl.py -env "$ENV" -o "$OUTPUT_DIR" -seed 0 -beta "$BETA"
+python3 -B prob_icl.py -env "$ENV" -o "$OUTPUT_DIR" -seed 0 -beta "$BETA" -delta "$DELTA"
 ```
-
-Plots were generated using `plot.py`.
