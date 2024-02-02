@@ -3,6 +3,7 @@ import copy
 import logging
 import random
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import numpy as np
 import torch
 import tqdm
@@ -82,6 +83,15 @@ def true_constraint_function(sa, unnormalize_mujoco=True):
             return torch.tensor(1).float()
         else:
             return torch.tensor(0).float()
+    elif basic.env_name == 'gridworld2':
+        # modified environment to test empirical beta(1-delta)
+        s, a = sa
+        x, y = s[0], s[1]
+        u = [(ui, uj) for ui in [2,3,4] for uj in [0, 1, 2, 3]]
+        if (x, y) in u:
+            return torch.tensor(1).float()
+        else:
+            return torch.tensor(0).float()
     elif basic.env_name == 'cartpole':
         s, a = sa
         # if s[0] <= 0.2:
@@ -113,7 +123,7 @@ def true_constraint_function(sa, unnormalize_mujoco=True):
 def constraint_mse(true_constraint_fn, constraint_fn):
     if true_constraint_fn == None or constraint_fn == None:
         return None
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         grid_for_action, true_grid_for_action = [], []
         for a in np.arange(basic.n_actions):
             grid = np.zeros((basic.gridworld_dim, basic.gridworld_dim))
@@ -159,7 +169,7 @@ def constraint_mse(true_constraint_fn, constraint_fn):
 def accrual_comparison(expert_data, data):
     if expert_data == None or data == None:
         return None
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         accrual = np.array([np.zeros((basic.gridworld_dim, basic.gridworld_dim)) for _ in range(basic.n_actions)])
         for S, A in data:
             for s, a in zip(S, A):
@@ -728,7 +738,7 @@ class TransformReward(RewardWrapper):
         return self.f(reward)
 
 def create_env():
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         basic.gridworld_dim = 7
         basic.n_actions = 8
         basic.constraint_fn_input_dim = 2
@@ -739,7 +749,11 @@ def create_env():
         r = np.zeros((basic.gridworld_dim, basic.gridworld_dim))
         r[6, 0] = 1.0
         t = [(6, 0)]
-        u = [(ui, uj) for ui in [3] for uj in [0, 1, 2, 3]]
+        if basic.env_name == 'gridworld2':
+            # modified environment to test empirical beta(1-delta)
+            u = [(ui, uj) for ui in [2, 3, 4] for uj in [0, 1, 2, 3]] 
+        else:
+            u = [(ui, uj) for ui in [3] for uj in [0, 1, 2, 3]] 
         s = [(ui, uj) for ui in [0, 1, 2] for uj in [0, 1]]
         env = tools.environments.GridworldEnvironment(
             start_states=s,
@@ -873,6 +887,7 @@ def gridworld_imshow(m, fig, ax):
     assert len(m.shape) == 2
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
+    m = (m-np.min(m))/(np.max(m)-np.min(m)+1e-3)
     im = ax.imshow(m, cmap="gray")
     # im.set_clim(0, 1)
     ax.set_xticks(np.arange(m.shape[0]))
@@ -882,7 +897,7 @@ def gridworld_imshow(m, fig, ax):
 def visualize_constraint(constraint_fn, savefig=None, fig=None, ax=None):
     if fig == None and ax == None:
         fig, ax = plt.subplots(1, 1, figsize=(3, 3))
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         grid_for_action = []
         for a in np.arange(basic.n_actions):
             grid = np.zeros((basic.gridworld_dim, basic.gridworld_dim))
@@ -955,7 +970,7 @@ def visualize_constraint(constraint_fn, savefig=None, fig=None, ax=None):
 def visualize_accrual(data, savefig=None, fig=None, ax=None):
     if fig == None and ax == None:
         fig, ax = plt.subplots(1, 1, figsize=(3, 3))
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         accrual = np.array([np.zeros((basic.gridworld_dim, basic.gridworld_dim)) for _ in range(basic.n_actions)])
         for S, A in data:
             for s, a in zip(S, A):
@@ -1031,7 +1046,7 @@ def visualize_accrual(data, savefig=None, fig=None, ax=None):
 # unnormalize_mujoco only triggered for mujoco environment
 def current_constraint_function(sa, unnormalize_mujoco=True):
     s, a = sa
-    if basic.env_name == 'gridworld':
+    if 'gridworld' in basic.env_name:
         return basic.constraint_nn(torch.tensor(s, device=basic.device, dtype=torch.float)).detach().cpu()  # Change this depending on the constraint_nn input
     elif basic.env_name == 'cartpole':
         return basic.constraint_nn(torch.tensor([s[0], a], device=basic.device, dtype=torch.float)).detach().cpu()
@@ -1295,8 +1310,8 @@ def ppo_penalty(n_epochs, env, policy_nn, value_nn, constraint_fn, additional_fn
             if Gc0_e[-1] >= basic.beta:
                 max_cost_reached += 1
             max_cost_reached_n += 1
-        print([(np.round(item, 2), item >= basic.beta) for item in Gc0_e])
-        print(max_cost_reached, max_cost_reached_n, basic.beta)
+        # print([(np.round(item, 2), item >= basic.beta) for item in Gc0_e])
+        # print(max_cost_reached, max_cost_reached_n, basic.beta)
         print("Epoch %d:\tG_avg = %.2f\tGc_avg = %.2f\tMaxCostReached = %.2f"
             % (epoch, np.mean(G0_e), np.mean(Gc0_e), float(max_cost_reached / max_cost_reached_n)))
         if basic.use_early_stopping:
@@ -1350,7 +1365,7 @@ def ppo_penalty(n_epochs, env, policy_nn, value_nn, constraint_fn, additional_fn
                 else:
                     Normal.update(*policy_nn(S_e[start_index:end_index]))
                     A_diff = Normal.rsample()
-                if basic.env_name == 'gridworld':
+                if 'gridworld' in basic.env_name:
                     SA_diff = S_e[start_index:end_index] # Change this depending on constraint_nn's input
                 elif 'mujoco' in basic.env_name:
                     SA_diff = basic.env.unnormalize(S_e[start_index:end_index, :])[:, :1] # Change this depending on constraint_nn's input
@@ -1606,7 +1621,7 @@ def ppo_penalty_gae(n_epochs, env, policy_nn, value_nn, constraint_fn, additiona
                 else:
                     Normal.update(*policy_nn(S_e[start_index:end_index]))
                     A_diff = Normal.rsample()
-                if basic.env_name == 'gridworld':
+                if 'gridworld' in basic.env_name:
                     SA_diff = S_e[start_index:end_index] # Change this depending on constraint_nn's input
                 elif 'mujoco' in basic.env_name:
                     SA_diff = basic.env.unnormalize(S_e[start_index:end_index, :].cpu()).to(basic.device).float()[:, :1] # Change this depending on constraint_nn's input
@@ -1738,7 +1753,7 @@ def convert_to_flow_data(data):
     flow_data = []
     for S, A in data:
         for s, a in zip(S, A):
-            if basic.env_name == 'gridworld':
+            if 'gridworld' in basic.env_name:
                 flow_data += [s]  # Change this depending on your constraint_nn input
             elif basic.env_name == 'cartpole':
                 flow_data += [[s[0], a]]
@@ -1762,7 +1777,7 @@ def dissimilarity_wrt_expert(data, mean=True):
     for S, A in data:
         traj_data = []
         for s, a in zip(S, A):
-            if basic.env_name == 'gridworld':
+            if 'gridworld' in basic.env_name:
                 traj_data += [s]  # Change this depending on your constraint_nn input
             elif basic.env_name == 'cartpole':
                 traj_data += [[s[0], a]]
@@ -1803,7 +1818,7 @@ def compute_cdf(constraint_nn, data):
     for S, A in data:
         input_to_constraint_nn = []
         for s, a in zip(S, A):
-            if basic.env_name == 'gridworld':
+            if 'gridworld' in basic.env_name:
                 input_to_constraint_nn += [s]  # Change this depending on your constraint_nn input
             elif basic.env_name == 'cartpole':
                 input_to_constraint_nn += [[s[0], a]]
@@ -1828,7 +1843,7 @@ def compute_current_constraint_value_trajectory(constraint_nn, data, p=False):
     for S, A in data:
         input_to_constraint_nn = []
         for s, a in zip(S, A):
-            if basic.env_name == 'gridworld':
+            if 'gridworld' in basic.env_name:
                 input_to_constraint_nn += [s]  # Change this depending on your constraint_nn input
             elif basic.env_name == 'cartpole':
                 input_to_constraint_nn += [[s[0], a]]

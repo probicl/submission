@@ -7,7 +7,7 @@ device = torch.device("cpu")
 # torch.cuda.set_per_process_memory_fraction(0.19)
 env_name = None
 unnormalized_env = None
-env_names_allowed = ['gridworld', 'cartpole', 'mujoco_ant', 'mujoco_hc', 'highd', 'exid']
+env_names_allowed = ['gridworld', 'gridworld2', 'cartpole', 'mujoco_ant', 'mujoco_hc', 'highd', 'exid']
 continuous_actions = False
 output_dir = None
 expert_data_file = None
