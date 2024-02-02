@@ -1,7 +1,7 @@
 """
 Utility classes and methods.
 """
-from .torch_helper import TorchHelper, FixedNormal
+from .torch_helper import TorchHelper, FixedNormal, Gaussian2
 from .misc import combine_dicts, nowarnings, timestamp, rewards_to_returns, \
     demo, get_package_root_path, dict_to_numpy, less_all, \
     less_equal_all, greater_all, greater_equal_all, \

@@ -34,8 +34,13 @@ pip install pynvml
 
 Comment/uncomment code before running
 ```
-./experiments.sh
-python3 -B plot.py
+ENV="gridworld" # one of ['gridworld', 'gridworld2', 'cartpole', 'mujoco_ant', 'mujoco_hc', 'highd']
+SEED=0 # change if needed
+BETA=0.99 # changed acc. to environment
+DELTA=0.9 # change if needed
+OUTPUT_DIR=output
+python3 -B icl.py -env "$ENV" -o "$OUTPUT_DIR" -seed 0 -beta "$BETA"
+python3 -B prob_icl.py -env "$ENV" -o "$OUTPUT_DIR" -seed 0 -beta "$BETA" -delta "$DELTA"
 ```
 
-Plots were generated using `plot.py`.
+To generate the expert data, first run `prob_icl.py` with a single seed with appropriate parameters, and then use it with `icl.py` or `prob_icl.py` using the `-expert_dir` argument.

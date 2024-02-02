@@ -10,7 +10,7 @@ import random
 import os
 from gym.envs.mujoco.ant_v3 import AntEnv
 from gym.envs.mujoco.half_cheetah import HalfCheetahEnv
-
+import pkg_resources
 
 class BrokenJoint(gym.Wrapper):
     """Wrapper that disables one coordinate of the action, setting it to 0."""
@@ -43,12 +43,16 @@ class AntWall(AntEnv):
             exclude_current_positions_from_observation=False
     ):
        super(AntWall, self).__init__(
-                xml_file=xml_file,
+                xml_file=os.path.abspath(pkg_resources.resource_filename('tools', xml_file)),
                 healthy_reward=healthy_reward,
                 terminate_when_unhealthy=terminate_when_unhealthy,
                 reset_noise_scale=reset_noise_scale,
                 exclude_current_positions_from_observation=exclude_current_positions_from_observation
         )
+
+    def seed(self, s=None):
+        return
+
     def step(self, action):
         xy_position_before = self.get_body_com("torso")[:2].copy()
         self.do_simulation(action, self.frame_skip)
@@ -69,7 +73,7 @@ class AntWall(AntEnv):
         costs = ctrl_cost + contact_cost
 
         reward = rewards - costs
-        done = self.terminated
+        done = self.terminated if hasattr(self, 'terminated') else self.done
         observation = self._get_obs()
         info = {
             # 'reward_forward': forward_reward,
@@ -151,6 +155,8 @@ class HalfCheetahWithPos(HalfCheetahEnv):
         done = False
         return ob, reward, done, info
 
+    def seed(self, s=None):
+        return
 
 # Taken from https://github.com/ikostrikov/pytorch-ddpg-naf/blob/master/normalized_actions.py
 class NormalizedActions(Environment):
@@ -287,7 +293,11 @@ class TimeLimit(Environment):
             observation, reward, done, info = step_data["next_state"], step_data["reward"],\
                 step_data["done"], step_data["info"]
         else:
-            observation, reward, done, info = step_data
+            if len(step_data) == 5:
+                observation, reward, term, trunc, info = step_data
+                done = term | trunc
+            else:
+                observation, reward, done, info = step_data
         self._elapsed_steps += 1
         if self._elapsed_steps >= self._max_episode_steps:
             done = True
@@ -310,7 +320,11 @@ class TimeLimit(Environment):
 
     def reset(self, **kwargs):
         self._elapsed_steps = 0
-        return self.env.reset(**kwargs)
+        reset_data = self.env.reset(**kwargs)
+        if type(reset_data) == tuple:
+            return reset_data[0]
+        else:
+            return reset_data
     
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -327,7 +341,11 @@ class FollowGymAPI(Environment):
             observation, reward, done, info = step_data["next_state"], step_data["reward"],\
                 step_data["done"], step_data["info"]
         else:
-            observation, reward, done, info = step_data
+            if len(step_data) == 5:
+                observation, reward, term, trunc, info = step_data
+                done = term | trunc
+            else:
+                observation, reward, done, info = step_data
         return observation, reward, done, info
 
     def seed(self, s=None):
@@ -339,7 +357,11 @@ class FollowGymAPI(Environment):
 
     def reset(self, **kwargs):
         self._elapsed_steps = 0
-        return self.env.reset(**kwargs)
+        reset_data = self.env.reset(**kwargs)
+        if type(reset_data) == tuple:
+            return reset_data[0]
+        else:
+            return reset_data
     
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -586,7 +608,11 @@ class GymEnvironment(Environment):
         """
         Reset the environment.
         """
-        self.curr_state = self.obj.reset(**kwargs)
+        reset_data = self.obj.reset(**kwargs)
+        if type(reset_data) == tuple:
+            self.curr_state = reset_data[0]
+        else:
+            self.curr_state = reset_data
         return self.curr_state
     
     def step(self, action=None):
@@ -595,7 +621,12 @@ class GymEnvironment(Environment):
         """
         if type(self.action_space) == gym.spaces.Box:
             action = np.clip(action, self.action_space.low, self.action_space.high)
-        next_state, reward, done, info = self.obj.step(action)
+        step_data = self.obj.step(action)
+        if len(step_data) == 5:
+            next_state, reward, term, trunc, info = step_data
+            done = term | trunc
+        else:
+            next_state, reward, done, info = step_data
         self.curr_state = next_state
         return {
             "next_state": next_state,
