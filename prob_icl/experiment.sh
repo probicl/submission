@@ -8,15 +8,15 @@ mkdir -p "output/highd"
 
 # Expert data generation
 
-# python3 -B prob_icl.py -env gridworld -o output/gridworld/expert -seed 0 -beta 0.99 -delta 0.6 -expert_only
-# python3 -B prob_icl.py -env cartpole -o output/cartpole/expert -seed 0 -beta 20 -delta 0.7 -expert_only
-# python3 -B prob_icl.py -env mujoco_ant -o output/mujoco_ant/expert -seed 0 -beta 15 -delta 0.7 -expert_only
-# python3 -B prob_icl.py -env mujoco_hc -o output/mujoco_hc/expert -seed 0 -beta 15 -delta 0.5 -expert_only
+python3 -B prob_icl.py -env gridworld -o output/gridworld/expert -seed 0 -beta 0.99 -delta 0.6 -expert_only
+python3 -B prob_icl.py -env cartpole -o output/cartpole/expert -seed 0 -beta 20 -delta 0.7 -expert_only
+python3 -B prob_icl.py -env mujoco_ant -o output/mujoco_ant/expert -seed 0 -beta 15 -delta 0.7 -expert_only
+python3 -B prob_icl.py -env mujoco_hc -o output/mujoco_hc/expert -seed 0 -beta 15 -delta 0.5 -expert_only
 
 # ICL
 
-# python3 -B icl.py -env gridworld -o output/gridworld/icl -seed 1 -expert_dir output/gridworld/expert
-# python3 -B icl.py -env cartpole -o output/cartpole/icl -seed 1 -expert_dir output/cartpole/expert -ppo_lag
+python3 -B icl.py -env gridworld -o output/gridworld/icl -seed 1 -expert_dir output/gridworld/expert
+python3 -B icl.py -env cartpole -o output/cartpole/icl -seed 1 -expert_dir output/cartpole/expert -ppo_lag
 python3 -B icl.py -env mujoco_ant -o output/mujoco_ant/icl -seed 1 -expert_dir output/mujoco_ant/expert -ppo_lag
 python3 -B icl.py -env mujoco_hc -o output/mujoco_hc/icl -seed 1 -expert_dir output/mujoco_hc/expert -ppo_lag
 python3 -B icl.py -env highd -o output/highd/icl -seed 1 -beta 0.1
