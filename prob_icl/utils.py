@@ -28,6 +28,17 @@ from gym.spaces import Box
 from typing import Any, Callable
 from gym import RewardWrapper
 import tensorflow as tf
+from mpl_toolkits import axes_grid1
+
+# def add_colorbar(im, aspect=20, pad_fraction=0.5, **kwargs):
+#     """Add a vertical color bar to an image plot."""
+#     divider = axes_grid1.make_axes_locatable(im.axes)
+#     width = axes_grid1.axes_size.AxesY(im.axes, aspect=1./aspect)
+#     pad = axes_grid1.axes_size.Fraction(pad_fraction, width)
+#     current_ax = plt.gca()
+#     cax = divider.append_axes("right", size=width, pad=pad)
+#     plt.sca(current_ax)
+#     return im.axes.figure.colorbar(im, cax=cax, **kwargs)
 
 def loadmodel(session, saver, checkpoint_dir):
     session.run(tf.compat.v1.global_variables_initializer())
@@ -919,9 +930,9 @@ def create_env():
             "rear_value": -25./100,
             "overlap": 0,
         }
-        LANE_CHANGE_EXPERT_DATA = "data/expert_data.pt"
-        LANE_CHANGE_DATA = "data/lane_change_data.pt"
-        LANE_CHANGE_IDS = "data/lane_changes.pt"
+        LANE_CHANGE_EXPERT_DATA = "data/expert_data_exid.pt"
+        LANE_CHANGE_DATA = "data/lane_changes_data_exid.pt"
+        LANE_CHANGE_IDS = "data/lane_changes_exid.pt"
         basic.expert_data, basic.bad_ids = torch.load(LANE_CHANGE_EXPERT_DATA)
         basic.lane_change_info = torch.load(LANE_CHANGE_DATA)
         basic.lane_change_ids = torch.load(LANE_CHANGE_IDS)
@@ -937,17 +948,18 @@ def create_env():
         basic.constraint_fn_input_dim = 5
         basic.continuous_actions = True
         basic.discount_factor = 1.0
+        basic.n_iters = 5
         env = ExidEnv(bad_ids=basic.bad_ids)
         env = tools.environments.FollowGymAPI(env)
     else:
         print('Bad env_name (create_env)')
         print('Allowed: %s' % basic.env_names_allowed)
         exit(0)
-    basic.ppo_iters = 2
-    basic.policy_add_to_mix_every = 1
-    basic.ca_iters = 1
-    basic.flow_iters = 1
-    basic.n_iters = 3
+    # basic.ppo_iters = 2
+    # basic.policy_add_to_mix_every = 1
+    # basic.ca_iters = 1
+    # basic.flow_iters = 1
+    # basic.n_iters = 3
     return env
 
 def gridworld_imshow(m, fig, ax):
@@ -1012,19 +1024,35 @@ def visualize_constraint(constraint_fn, savefig=None, fig=None, ax=None):
         lead_value = extra_kwargs["lead_value"]
         rear_value = extra_kwargs["rear_value"]
         overlap = extra_kwargs["overlap"]
-        g = np.zeros((31, 41))
-        for sgn_dist in np.arange(-2., 2.+0.1, 0.1):
-            for a in np.arange(-3, 3+0.2, 0.2):
-                g[int(a*5+15)][int((sgn_dist*2+4.)*5)] = float(constraint_fn(([sgn_dist, lead_value, rear_value, overlap], [a])).detach())
-        im = ax.imshow(g, cmap="gray", extent = [-3, 3, -10/5., 10/5.], aspect=6/4.)
+        g = np.zeros((61, 81))
+        for sgn_dist in np.arange(-2., 2.+0.05, 0.05):
+            for a in np.arange(-3, 3+0.1, 0.1):
+                g[int(a*10+30)][int((sgn_dist*4+8.)*5)] = float(constraint_fn(([sgn_dist, lead_value, rear_value, overlap], [a])).detach())
+        im = ax.imshow(np.flipud(g), cmap="gray", extent = [-3, 3, -10, 10], aspect='auto')
         im.set_clim(0, 1)
-        fig.colorbar(im, ax=ax)
-        ax.set_title("L=%s, R=%s, O=%s" % 
-                                (
-                                    str(lead_value)+" m" if lead_value != 1 else "None",
-                                    str(rear_value)+" m" if rear_value != -1 else "None",
-                                    "yes" if overlap == 1 else "no",
-                                ), fontsize=10, color="brown")
+        ax.set_ylim([-10, 10])
+        ax.set_xlim([-3, 3])
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(im, cax=cax)
+        xp, yp = [], []
+        for S, A in basic.expert_data:
+            for s, a in zip(S, A):
+                # if lead_value-2.5 <= s[1]*100 <= lead_value+2.5 and \
+                # rear_value-2.5 <= s[2]*100 <= rear_value+2.5 and \
+                # overlap == s[3] and \
+                if -10 <= s[0]*5 <= 10 and \
+                -3 <= a[0] <= 3:
+                    xp += [a[0]]
+                    yp += [s[0]*5]
+        ax.scatter(xp, yp, s=1, color='red')
+        # add_colorbar(im)
+        # ax.set_title("L=%s, R=%s, O=%s" % 
+        #                         (
+        #                             str(lead_value)+" m" if lead_value != 1 else "None",
+        #                             str(rear_value)+" m" if rear_value != -1 else "None",
+        #                             "yes" if overlap == 1 else "no",
+        #                         ), fontsize=10, color="brown")
         ax.set_ylabel("signed distance to target lane (m)")
         ax.set_xlabel("lateral velocity action (m/s)")
     else:
@@ -1086,21 +1114,22 @@ def visualize_accrual(data, savefig=None, fig=None, ax=None):
         lead_value = extra_kwargs["lead_value"]
         rear_value = extra_kwargs["rear_value"]
         overlap = extra_kwargs["overlap"]
+        # fig, ax = plt.subplots(1, 1, figsize=(3, 4))
         xp, yp = [], []
         for S, A in data:
             for s, a in zip(S, A):
-                if lead_value-2.5/100. <= s[1] <= lead_value+2.5/100 and \
-                    rear_value-2.5/100 <= s[2] <= rear_value+2.5/100 and \
-                    overlap == s[3]:
-                    xp += [a[0]]
-                    yp += [s[0]]
+                # if lead_value-2.5/100. <= s[1] <= lead_value+2.5/100 and \
+                #     rear_value-2.5/100 <= s[2] <= rear_value+2.5/100 and \
+                #     overlap == s[3]:
+                xp += [a[0]]
+                yp += [s[0]*5]
         ax.scatter(xp, yp, s=1, color='red')
-        ax.set_title("L=%s, R=%s, O=%s" % 
-                                (
-                                    str(lead_value)+" m" if lead_value != 1 else "None",
-                                    str(rear_value)+" m" if rear_value != -1 else "None",
-                                    "yes" if overlap == 1 else "no",
-                                ), fontsize=10, color="brown")
+        # ax.set_title("L=%s, R=%s, O=%s" % 
+        #                         (
+        #                             str(lead_value)+" m" if lead_value != 1 else "None",
+        #                             str(rear_value)+" m" if rear_value != -1 else "None",
+        #                             "yes" if overlap == 1 else "no",
+        #                         ), fontsize=10, color="brown")
         ax.set_ylabel("signed distance to target lane (m)")
         ax.set_xlabel("lateral velocity action (m/s)")
     else:
@@ -1126,6 +1155,7 @@ def current_constraint_function(sa, unnormalize_mujoco=True):
     elif basic.env_name == 'highd':
         return basic.constraint_nn(torch.tensor([s[2], s[-1]], device=basic.device, dtype=torch.float)).detach().cpu()
     elif basic.env_name == 'exid':
+        # return basic.constraint_nn(torch.tensor([s[0], a[0]], device=basic.device, dtype=torch.float)).detach().cpu()
         return basic.constraint_nn(torch.tensor([*s, *a], device=basic.device, dtype=torch.float)).detach().cpu()
     else:
         print('Bad env_name (current_constraint_function)')
@@ -1446,6 +1476,7 @@ def ppo_penalty(n_epochs, env, policy_nn, value_nn, constraint_fn, additional_fn
                     SA_diff = torch.cat([S_e[start_index:end_index, :1], (A_diff @ torch.arange(basic.act_n).float().to(basic.device)).view(-1, 1)], dim=-1)
                 elif basic.env_name == 'exid':
                     SA_diff = torch.cat([S_e[start_index:end_index, :], (A_diff).view(-1, 1)], dim=-1)
+                    # SA_diff = torch.cat([S_e[start_index:end_index, :1], (A_diff).view(-1, 1)], dim=-1)
                 else:
                     print("Bad env_name (ppo_penalty)")
                     print('Allowed: %s' % basic.env_names_allowed)
@@ -1717,6 +1748,7 @@ def ppo_penalty_gae(n_epochs, env, policy_nn, value_nn, constraint_fn, additiona
                     SA_diff = torch.cat([S_e[start_index:end_index, :1], (A_diff @ torch.arange(basic.act_n).float().to(basic.device)).view(-1, 1)], dim=-1)
                 elif basic.env_name == 'exid':
                     SA_diff = torch.cat([S_e[start_index:end_index, :], (A_diff).view(-1, 1)], dim=-1)
+                    # SA_diff = torch.cat([S_e[start_index:end_index, :1], (A_diff).view(-1, 1)], dim=-1)
                 else:
                     print("Bad env_name (ppo_penalty_gae)")
                     print('Allowed: %s' % basic.env_names_allowed)
@@ -1914,6 +1946,7 @@ def convert_to_flow_data(data):
                 flow_data += [[s[2], s[-1]]]
             elif basic.env_name == 'exid':
                 flow_data += [[*s, *a]]
+                # flow_data += [[s[0], a[0]]]
             else:
                 print("Bad env_name (convert_to_flow_data)")
                 print('Allowed: %s' % basic.env_names_allowed)
@@ -1938,6 +1971,7 @@ def dissimilarity_wrt_expert(data, mean=True):
                 traj_data += [[s[2], s[-1]]]
             elif basic.env_name == 'exid':
                 traj_data += [[*s, *a]]
+                # traj_data += [[s[0], a[0]]]
             else:
                 print("Bad env_name (dissimilarity_wrt_expert)")
                 print('Allowed: %s' % basic.env_names_allowed)
@@ -1983,6 +2017,7 @@ def compute_cdf(constraint_nn, data):
                 input_to_constraint_nn += [[s[2], s[-1]]]
             elif basic.env_name == 'exid':
                 input_to_constraint_nn += [[*s, *a]]
+                # input_to_constraint_nn += [[s[0], a[0]]]
             else:
                 print("Bad env_name (compute_cdf)")
                 print('Allowed: %s' % basic.env_names_allowed)
@@ -2008,6 +2043,7 @@ def compute_current_constraint_value_trajectory(constraint_nn, data, p=False):
                 input_to_constraint_nn += [[s[2], s[-1]]]
             elif basic.env_name == 'exid':
                 input_to_constraint_nn += [[*s, *a]]
+                # input_to_constraint_nn += [[s[0], a[0]]]
             else:
                 print("Bad env_name (compute_current_constraint_value_traj)")
                 print('Allowed: %s' % basic.env_names_allowed)
@@ -2338,6 +2374,7 @@ class ExidEnv(tools.base.Environment):
         # define action and observation space
         high = float("inf")
         self.action_space = gym.spaces.Box(-high, high, shape=(1,), dtype=np.float32)
+        # self.observation_space = gym.spaces.Box(-high, high, shape=(1,), dtype=np.float32)
         self.observation_space = gym.spaces.Box(-high, high, shape=(4,), dtype=np.float32)
         # use preprocessed data
         self.data = basic.lane_change_info
@@ -2416,6 +2453,7 @@ class ExidEnv(tools.base.Environment):
         new_point2 = ipline_target.interpolate(self.lon_dist)
         dist_target = Point(new_x, new_y).distance(new_point2)
         self.curr_state = np.array([side * dist_target / 5., target_lead / 100., target_rear / 100., float(overlap)])
+        # self.curr_state = np.array([side * dist_target/5.])
         # other initialization stuff
         self.initial_side = side
         self.initial_dist_target = side * dist_target
@@ -2445,6 +2483,7 @@ class ExidEnv(tools.base.Environment):
         new_point2 = ipline_target.interpolate(self.lon_dist)
         dist_target = Point(new_x, new_y).distance(new_point2)
         return np.array([side * dist_target / 5., target_lead / 100., target_rear / 100., float(overlap)]), new_x, new_y
+        # return np.array([side * dist_target/5.]), new_x, new_y
     def step(self, action=None):
         # time step += 1
         self.i += 1
@@ -2474,6 +2513,7 @@ class ExidEnv(tools.base.Environment):
         new_point2 = ipline_target.interpolate(self.lon_dist)
         dist_target = Point(new_x, new_y).distance(new_point2)
         self.curr_state = np.array([side * dist_target / 5., target_lead / 100., target_rear / 100., float(overlap)])
+        # self.curr_state = np.array([side * dist_target/5.])
         # are we outside bounds?
         my_id = localize(self.osm, new_x, new_y)
         outside = False
@@ -2568,7 +2608,7 @@ class ExidEnv(tools.base.Environment):
                 self.ax2.set_ylim(min(cvals), max(cvals))
             else:
                 self.plot.set_ydata(cvals)
-                self.ax2.set_ylim(min(cvals), max(cvals))
+                self.ax2.set_ylim(min(cvals), max(cvals)), lead_value, rear_value, overlap
         # show items in V
         if self.V != None:
             if not hasattr(self, 'plotted_v'):
